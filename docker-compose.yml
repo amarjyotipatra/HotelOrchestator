@@ -1,4 +1,20 @@
 services:
+  # ─── PostgreSQL (backing store for Temporal) ───
+  postgresql:
+    image: postgres:15-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: temporal
+      POSTGRES_PASSWORD: temporal
+    volumes:
+      - postgresql-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U temporal"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   # ─── Redis ───
   redis:
     image: redis:7-alpine
@@ -12,20 +28,26 @@ services:
       timeout: 5s
       retries: 3
 
-  # ─── Temporal Server (dev server — all-in-one) ───
+  # ─── Temporal Server ───
   temporal:
     image: temporalio/auto-setup:latest
     ports:
       - "7233:7233"
     environment:
-      - DB=sqlite
-      - DYNAMIC_CONFIG_FILE_PATH=config/dynamicconfig/development-sql.yaml
+      - DB=postgres12
+      - DB_PORT=5432
+      - POSTGRES_USER=temporal
+      - POSTGRES_PWD=temporal
+      - POSTGRES_SEEDS=postgresql
+    depends_on:
+      postgresql:
+        condition: service_healthy
     healthcheck:
-      test: ["CMD", "tctl", "--address", "temporal:7233", "cluster", "health"]
+      test: ["CMD", "temporal", "operator", "cluster", "health"]
       interval: 15s
       timeout: 10s
       retries: 10
-      start_period: 30s
+      start_period: 40s
 
   # ─── Temporal Web UI ───
   temporal-ui:
@@ -35,7 +57,8 @@ services:
     environment:
       - TEMPORAL_ADDRESS=temporal:7233
     depends_on:
-      - temporal
+      temporal:
+        condition: service_healthy
 
   # ─── Hotel Orchestrator API ───
   api:
@@ -53,7 +76,7 @@ services:
       redis:
         condition: service_healthy
       temporal:
-        condition: service_started
+        condition: service_healthy
     restart: on-failure
 
   # ─── Temporal Worker ───
@@ -70,10 +93,11 @@ services:
       redis:
         condition: service_healthy
       temporal:
-        condition: service_started
+        condition: service_healthy
       api:
         condition: service_started
     restart: on-failure
 
 volumes:
   redis-data:
+  postgresql-data:
