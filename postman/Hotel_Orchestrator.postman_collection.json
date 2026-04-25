@@ -1,0 +1,233 @@
+{
+  "info": {
+    "name": "Hotel Orchestrator API",
+    "description": "Postman collection for testing the Hotel Offer Orchestrator API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health Check",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["health"]
+            },
+            "description": "Check the health of the API and both suppliers"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Supplier APIs (Mock)",
+      "item": [
+        {
+          "name": "Supplier A - Delhi Hotels",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/supplierA/hotels?city=delhi",
+              "host": ["{{baseUrl}}"],
+              "path": ["supplierA", "hotels"],
+              "query": [
+                { "key": "city", "value": "delhi" }
+              ]
+            },
+            "description": "Get all hotels from Supplier A for Delhi"
+          },
+          "response": []
+        },
+        {
+          "name": "Supplier B - Delhi Hotels",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/supplierB/hotels?city=delhi",
+              "host": ["{{baseUrl}}"],
+              "path": ["supplierB", "hotels"],
+              "query": [
+                { "key": "city", "value": "delhi" }
+              ]
+            },
+            "description": "Get all hotels from Supplier B for Delhi"
+          },
+          "response": []
+        },
+        {
+          "name": "Supplier A - Mumbai Hotels",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/supplierA/hotels?city=mumbai",
+              "host": ["{{baseUrl}}"],
+              "path": ["supplierA", "hotels"],
+              "query": [
+                { "key": "city", "value": "mumbai" }
+              ]
+            },
+            "description": "Get all hotels from Supplier A for Mumbai"
+          },
+          "response": []
+        },
+        {
+          "name": "Supplier B - Mumbai Hotels",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/supplierB/hotels?city=mumbai",
+              "host": ["{{baseUrl}}"],
+              "path": ["supplierB", "hotels"],
+              "query": [
+                { "key": "city", "value": "mumbai" }
+              ]
+            },
+            "description": "Get all hotels from Supplier B for Mumbai"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Hotel Orchestrator API",
+      "item": [
+        {
+          "name": "Get Delhi Hotels (Deduplicated)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/hotels?city=delhi",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "hotels"],
+              "query": [
+                { "key": "city", "value": "delhi" }
+              ]
+            },
+            "description": "Fetch deduplicated hotels for Delhi via Temporal workflow. Hotels overlapping between suppliers will show the cheapest price."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Delhi Hotels (Price Range Filter)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/hotels?city=delhi&minPrice=5000&maxPrice=9000",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "hotels"],
+              "query": [
+                { "key": "city", "value": "delhi" },
+                { "key": "minPrice", "value": "5000" },
+                { "key": "maxPrice", "value": "9000" }
+              ]
+            },
+            "description": "Fetch deduplicated hotels for Delhi filtered by price range (5000-9000). Filtering is done in Redis using sorted sets."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Mumbai Hotels (Deduplicated)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/hotels?city=mumbai",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "hotels"],
+              "query": [
+                { "key": "city", "value": "mumbai" }
+              ]
+            },
+            "description": "Fetch deduplicated hotels for Mumbai via Temporal workflow"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Bangalore Hotels (Deduplicated)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/hotels?city=bangalore",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "hotels"],
+              "query": [
+                { "key": "city", "value": "bangalore" }
+              ]
+            },
+            "description": "Fetch deduplicated hotels for Bangalore via Temporal workflow"
+          },
+          "response": []
+        },
+        {
+          "name": "City With No Results",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/hotels?city=goa",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "hotels"],
+              "query": [
+                { "key": "city", "value": "goa" }
+              ]
+            },
+            "description": "Test with a city that has no hotels in either supplier — should return empty array"
+          },
+          "response": []
+        },
+        {
+          "name": "Missing City Parameter",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/hotels",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "hotels"]
+            },
+            "description": "Test with missing 'city' query param — should return 400 error"
+          },
+          "response": []
+        },
+        {
+          "name": "Invalid Price Range",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/hotels?city=delhi&minPrice=10000&maxPrice=5000",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "hotels"],
+              "query": [
+                { "key": "city", "value": "delhi" },
+                { "key": "minPrice", "value": "10000" },
+                { "key": "maxPrice", "value": "5000" }
+              ]
+            },
+            "description": "Test with min > max — should return 400 error"
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}
