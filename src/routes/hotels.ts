@@ -73,7 +73,15 @@ router.get("/hotels", async (req: Request, res: Response) => {
     // Return full deduplicated list
     res.json(result);
   } catch (error: any) {
-    logger.error({ error: error.message, city }, "Hotel comparison workflow failed");
+    logger.error({ error: error.message, stack: error.stack, city }, "Hotel comparison workflow failed");
+
+    // If the workflow failed but it's a data issue (no hotels found), return empty
+    if (error.message?.includes("Workflow execution failed")) {
+      logger.warn({ city }, "Workflow failed — likely no hotels found, returning empty array");
+      res.json([]);
+      return;
+    }
+
     res.status(500).json({
       error: "Failed to fetch hotel offers",
       details: error.message,

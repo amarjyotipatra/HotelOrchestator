@@ -43,11 +43,11 @@ services:
       postgresql:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "temporal", "operator", "cluster", "health"]
-      interval: 15s
-      timeout: 10s
-      retries: 10
-      start_period: 40s
+      test: ["CMD-SHELL", "nc -z temporal 7233 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 60s
 
   # ─── Temporal Web UI ───
   temporal-ui:
