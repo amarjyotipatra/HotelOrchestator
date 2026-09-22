@@ -4,7 +4,6 @@ import {
 } from "@temporalio/workflow";
 import type { SupplierHotel, DeduplicatedHotel } from "../types/hotel";
 
-// ─── Proxy activities so Temporal can intercept and schedule them ───
 const {
   fetchSupplierA,
   fetchSupplierB,
@@ -24,16 +23,35 @@ const {
   },
 });
 
-// ─── Workflow: Hotel Comparison Orchestrator ───
 export async function hotelComparisonWorkflow(city: string): Promise<DeduplicatedHotel[]> {
   log.info("Starting hotel comparison workflow", { city });
 
-  // Step 1: Fetch from both suppliers in parallel
-  log.info("Fetching from Supplier A and B in parallel", { city });
-  const [hotelsA, hotelsB] = await Promise.all([
+  // Use allSettled so one unavailable supplier does not discard the healthy
+  // supplier's offers. Activity retries still apply before a result settles.
+  const [supplierAResult, supplierBResult] = await Promise.allSettled([
     fetchSupplierA(city),
     fetchSupplierB(city),
   ]);
+
+  const hotelsA = supplierAResult.status === "fulfilled" ? supplierAResult.value : [];
+  const hotelsB = supplierBResult.status === "fulfilled" ? supplierBResult.value : [];
+
+  if (supplierAResult.status === "rejected") {
+    log.warn("Supplier A failed; continuing with Supplier B results", {
+      city,
+      error: String(supplierAResult.reason),
+    });
+  }
+  if (supplierBResult.status === "rejected") {
+    log.warn("Supplier B failed; continuing with Supplier A results", {
+      city,
+      error: String(supplierBResult.reason),
+    });
+  }
+
+  if (supplierAResult.status === "rejected" && supplierBResult.status === "rejected") {
+    throw new Error("Both hotel suppliers failed");
+  }
 
   log.info("Received supplier data", {
     city,
@@ -41,15 +59,9 @@ export async function hotelComparisonWorkflow(city: string): Promise<Deduplicate
     supplierBCount: hotelsB.length,
   });
 
-  // Step 2: Deduplicate — keep cheapest per hotel name
   const deduplicated = await deduplicateHotels(hotelsA, hotelsB);
-
-  log.info("Deduplication complete", { city, count: deduplicated.length });
-
-  // Step 3: Save to Redis for price filtering
   await saveToRedis(city, deduplicated);
 
-  log.info("Workflow complete — results cached in Redis", { city });
-
+  log.info("Workflow complete — results cached in Redis", { city, count: deduplicated.length });
   return deduplicated;
 }

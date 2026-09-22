@@ -8,24 +8,30 @@ import logger from "../utils/logger";
 const router = Router();
 const TASK_QUEUE = "hotel-orchestrator";
 
-// GET /api/hotels?city=delhi&minPrice=5000&maxPrice=10000
+function parsePrice(value: unknown): number | undefined {
+  if (value === undefined || value === "") return undefined;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
 router.get("/hotels", async (req: Request, res: Response) => {
   const city = (req.query.city as string || "").toLowerCase().trim();
-  const minPrice = req.query.minPrice ? parseFloat(req.query.minPrice as string) : undefined;
-  const maxPrice = req.query.maxPrice ? parseFloat(req.query.maxPrice as string) : undefined;
+  const hasMinPrice = req.query.minPrice !== undefined;
+  const hasMaxPrice = req.query.maxPrice !== undefined;
+  const minPrice = parsePrice(req.query.minPrice);
+  const maxPrice = parsePrice(req.query.maxPrice);
 
   if (!city) {
     res.status(400).json({ error: "Query parameter 'city' is required" });
     return;
   }
 
-  // Validate price range parameters
-  if (minPrice !== undefined && isNaN(minPrice)) {
-    res.status(400).json({ error: "'minPrice' must be a valid number" });
+  if ((hasMinPrice && minPrice === undefined) || (hasMaxPrice && maxPrice === undefined)) {
+    res.status(400).json({ error: "Price filters must be finite numbers" });
     return;
   }
-  if (maxPrice !== undefined && isNaN(maxPrice)) {
-    res.status(400).json({ error: "'maxPrice' must be a valid number" });
+  if (minPrice !== undefined && minPrice < 0 || maxPrice !== undefined && maxPrice < 0) {
+    res.status(400).json({ error: "Price filters cannot be negative" });
     return;
   }
   if (minPrice !== undefined && maxPrice !== undefined && minPrice > maxPrice) {
@@ -35,57 +41,34 @@ router.get("/hotels", async (req: Request, res: Response) => {
 
   try {
     const workflowId = `hotel-comparison-${city}-${uuidv4()}`;
-
-    logger.info({ city, workflowId, minPrice, maxPrice }, "Starting hotel comparison workflow");
-
-    // Start the Temporal workflow
     const client = await getTemporalClient();
     const handle = await client.workflow.start("hotelComparisonWorkflow", {
       args: [city],
       taskQueue: TASK_QUEUE,
       workflowId,
     });
-
-    logger.info({ workflowId }, "Workflow started, awaiting result...");
-
-    // Wait for the workflow to complete
     const result: DeduplicatedHotel[] = await handle.result();
 
-    logger.info({ workflowId, resultCount: result.length }, "Workflow completed");
-
-    // If price filters are specified, query Redis sorted set by price range
     if (minPrice !== undefined || maxPrice !== undefined) {
-      const redisKey = `hotels:${city}`;
-      const min = minPrice ?? 0;
-      const max = maxPrice ?? "+inf";
-
-      logger.info({ redisKey, min, max }, "Filtering by price range from Redis");
-
-      const filtered = await redis.zrangebyscore(redisKey, min, max as any);
-      const filteredHotels: DeduplicatedHotel[] = filtered.map((item) => JSON.parse(item));
-
-      logger.info({ filteredCount: filteredHotels.length }, "Price-filtered results ready");
-
-      res.json(filteredHotels);
+      const filtered = await redis.zrangebyscore(
+        `hotels:${city}`,
+        minPrice ?? 0,
+        maxPrice ?? "+inf",
+      );
+      res.json(filtered.map((item) => JSON.parse(item) as DeduplicatedHotel));
       return;
     }
 
-    // Return full deduplicated list
     res.json(result);
   } catch (error: any) {
     logger.error({ error: error.message, stack: error.stack, city }, "Hotel comparison workflow failed");
 
-    // If the workflow failed but it's a data issue (no hotels found), return empty
-    if (error.message?.includes("Workflow execution failed")) {
-      logger.warn({ city }, "Workflow failed — likely no hotels found, returning empty array");
-      res.json([]);
+    if (error.message?.includes("Both hotel suppliers failed")) {
+      res.status(503).json({ error: "Both hotel suppliers are unavailable" });
       return;
     }
 
-    res.status(500).json({
-      error: "Failed to fetch hotel offers",
-      details: error.message,
-    });
+    res.status(500).json({ error: "Failed to fetch hotel offers" });
   }
 });
 
